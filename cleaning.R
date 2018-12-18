@@ -22,24 +22,32 @@ df$date<- with(df, ymd_h(paste(FECHA, HORA, sep= ' ')))
 df<-df[,c(which(colnames(df)=="date"),which(colnames(df)!="date"))]
 df[df == -99] <- NA
 
-df_temp.mean<- timeAverage(df[-2:-4], avg.time = "day", data.thresh = 75)
-df_temp.mean<- melt(df_temp.mean, id.vars = "date")
-colnames(df_temp.mean)[colnames(df_temp.mean) == 'value'] <- 'temp.mean'
 
-df_temp.low<- timeAverage(df[-2:-4], avg.time = "day", statistic = "min", data.thresh = 75)
-df_temp.low<- melt(df_temp.low, id.vars = "date")
-colnames(df_temp.low)[colnames(df_temp.low) == 'value'] <- 'low.temp'
+l = lapply(c("high", "low", "mean"), function(type)
+{temp <- timeAverage(df[-2:-4], avg.time = "day",
+                     statistic = list(mean = "mean", low = "min", high = 
+                                        "max")[[type]],
+                     data.thresh = 75)
+temp <- melt(temp, id.vars = "date")
+colnames(temp)[colnames(temp) == 'value'] <- paste0(type, ".temp")
+temp})
+df_temp <- left_join(l[[1]], l[[2]], by = c("date", "variable")) %>%
+  left_join(l[[3]], by = c("date", "variable"))
 
-df_temp.hi<- timeAverage(df[-2:-4], avg.time = "day", statistic = "max", data.thresh = 75)
-df_temp.hi<- melt(df_temp.hi, id.vars = "date")
-colnames(df_temp.hi)[colnames(df_temp.hi) == 'value'] <- 'hi.temp'
-
-df_temp <- left_join(df_temp.hi, df_temp.low, by = c("date", "variable")) %>%
-  left_join(df_temp.mean, by = c("date", "variable"))
-colnames(df_temp)[colnames(df_temp) == 'variable'] <- 'cve'
-df_temp$cve<-as.character(df_temp$cve)
-
-rm(df_temp.hi, df_temp.low, df_temp.mean)
+#df_temp.mean<- timeAverage(df[-2:-4], avg.time = "day", data.thresh = 75)
+#df_temp.mean<- melt(df_temp.mean, id.vars = "date")
+#colnames(df_temp.mean)[colnames(df_temp.mean) == 'value'] <- 'temp.mean'
+#df_temp.low<- timeAverage(df[-2:-4], avg.time = "day", statistic = "min", data.thresh = 75)
+#df_temp.low<- melt(df_temp.low, id.vars = "date")
+#colnames(df_temp.low)[colnames(df_temp.low) == 'value'] <- 'low.temp'
+#df_temp.hi<- timeAverage(df[-2:-4], avg.time = "day", statistic = "max", data.thresh = 75)
+#df_temp.hi<- melt(df_temp.hi, id.vars = "date")
+#colnames(df_temp.hi)[colnames(df_temp.hi) == 'value'] <- 'hi.temp'
+#df_temp <- left_join(df_temp.hi, df_temp.low, by = c("date", "variable")) %>%
+#  left_join(df_temp.mean, by = c("date", "variable"))
+#colnames(df_temp)[colnames(df_temp) == 'variable'] <- 'cve'
+#df_temp$cve<-as.character(df_temp$cve)
+#rm(df_temp.hi, df_temp.low, df_temp.mean)
 
 #  Relative humidity___________________________________________________________________________________________________#
 temp = list.files(pattern="*RH.xls")
@@ -133,3 +141,4 @@ df_SMN_REDMET<-rbind(adarobject,df_REDMET_01_15, fill=T)
 rm(cat_estacion, df_REDMET_01_15)
 
 saveRDS(df_SMN_REDMET, file = "C:/Users/Iván/Dropbox/MEXICO_TEMPERATURE_MODEL/DATA_CLEANING/tmpcleaning/data/SMN_REDMET_2015_barmean_rain.rds")
+
