@@ -127,7 +127,7 @@ df_SMN_REDMET<-rbind(adarobject,df_REDMET_01_15, fill=T)
 rm(cat_estacion, df_REDMET_01_15)
 
 saveRDS(df_SMN_REDMET, file = "C:/Users/Iván/Dropbox/MEXICO_TEMPERATURE_MODEL/DATA_CLEANING/tmpcleaning/data/SMN_REDMET_2015_barmean_rain.rds")
-
+  
 
 ####################################################################################################################
 
@@ -136,6 +136,7 @@ saveRDS(df_SMN_REDMET, file = "C:/Users/Iván/Dropbox/MEXICO_TEMPERATURE_MODEL/D
 library(readr)
 library(data.table)
 library(tidyverse)
+library(stringi) 
 #library(MESS)
 #library(naniar)
 
@@ -152,13 +153,58 @@ x <- x %>% select(-contains("FLAG"))
 y <- x[,-c(1,3)]
 y$`YEAR-MONTH-DAY` <- as.character(y$`YEAR-MONTH-DAY`)
 colnames(y)[colnames(y) =='YEAR-MONTH-DAY'] <- 'date'
+as.character(colnames(y)[colnames(y) =='Station-ID'] <- 'id')
 y[y==-99999 | y>=50]<-NA
-y$non_count <- apply(y[,c(3:26)], 1, function(x) sum(!is.na(x)))
+#y$non_NA <- apply(y[,c(3:26)], 1, function(y) sum(!is.na(y)))
+saveRDS(y, file = "C:/TMP_MEX/cleaning/tempcleaning/obs_y")
 
-conditional <- function(x) {
-  if (sum(!is.na(x[3:26])) >= 18) {
-    c(max(x[3:26], na.rm = T), min(x[3:26], na.rm = T), mean(x[3:26], na.rm = T))
+
+#Melts "y" in order to apply the OpenAir package to calculate daily mean, min and max
+#temperatures with 75% suficiency
+
+z1 <-melt(y[,1:26], id.vars = c("id", "date"),
+         variable.name = "time_v", 
+         value.name = "temp")
+z1$time <-as.numeric(z1$time_v)
+z1$date <-with(z1, ymd_h(paste(date, time, sep= '_')))
+z1$id <-as.character(with(z1, paste("id",id, sep= '_')))
+z1$time_v <-NULL
+z1$time <-NULL
+z2 <-as.data.table(dcast(z1, date~rowid(date), value.var="temp"))
+#The output removes 7 ids out of 70 yielding a "wide" data.table with only 64 columns, the first being for date
+
+l = lapply(c("high", "low", "mean"), function(type)
+{temp <- timeAverage(z2, avg.time = "day",
+                     statistic = list(mean = "mean", low = "min", high =  "max")[[type]],
+                     data.thresh = 75)
+temp <- melt(temp, id.vars = "date")
+colnames(temp)[colnames(temp) == 'value'] <- paste0(type, ".temp")
+temp})
+df_z2 <- left_join(l[[1]], l[[2]], by = c("date", "variable")) %>%
+  left_join(l[[3]], by = c("date", "variable"))
+colnames(df_z2)[colnames(df_z2) == 'variable'] <- 'stn'
+
+
+#Second attemp to calculate daily mean, min and max temperatures without having to melt "y"
+#and using our a function across columns in "y" to obtain daily mean, min and max with 75% daily 
+#sufficiency
+
+conditional <- function(y) {
+  if (sum(!is.na(y[3:26])) >= 18) {
+    c(max(y[3:26], na.rm = T), min(y[3:26], na.rm = T), mean(y[3:26], na.rm = T))
   } else {
-    `c(NA, NA, NA)`
+    c(NA, NA, NA)
   }
 }
+z <- y[ ,apply(y[,c(3:26)], 1, FUN = conditional)]
+
+
+conditional <- function(y) {
+  if (sum(!is.na(y[3:26])) >= 18) {
+    list(max(y[3:26], na.rm = T), min(y[3:26], na.rm = T), mean(y[3:26], na.rm = T))
+  } else {
+    c(NA, NA, NA)
+  }
+}
+z <- y[ ,c(conditional[3:26]), by=date]
+
